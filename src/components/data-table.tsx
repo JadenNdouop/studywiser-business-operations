@@ -129,11 +129,6 @@ export function DataTable<T>({
     currentPage * pageSize + pageSize,
   );
 
-  // Reset to first page whenever the result set shrinks below the current page.
-  React.useEffect(() => {
-    if (page > pageCount - 1) setPage(0);
-  }, [page, pageCount]);
-
   function toggleSort(columnId: string) {
     setSort((prev) => {
       if (!prev || prev.columnId !== columnId) return { columnId, dir: "asc" };
@@ -285,7 +280,7 @@ export function DataTable<T>({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                onClick={() => setPage(Math.max(0, currentPage - 1))}
                 disabled={currentPage === 0}
               >
                 Previous
@@ -293,7 +288,7 @@ export function DataTable<T>({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                onClick={() => setPage(Math.min(pageCount - 1, currentPage + 1))}
                 disabled={currentPage >= pageCount - 1}
               >
                 Next
