@@ -3,8 +3,10 @@
 import { Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { DEMO_MODE } from "@/lib/demo-mode";
 import { UserMenu } from "./user-menu";
 import { allNavItems } from "./nav-config";
 
@@ -38,6 +40,11 @@ export function Header({
         <Menu className="h-5 w-5" />
       </Button>
       <h1 className="text-sm font-semibold tracking-tight">{title}</h1>
+      {DEMO_MODE && (
+        <Badge variant="warning" className="hidden sm:inline-flex">
+          Demo
+        </Badge>
+      )}
       <div className="flex-1" />
       <ThemeToggle />
       <UserMenu

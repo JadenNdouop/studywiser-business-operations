@@ -25,34 +25,39 @@ doc for the full phase plan.
 - **Recharts** for charts, **react-hook-form** + **zod** for forms
 - **Vitest** + Testing Library for tests
 
-## Prerequisites
+## Quick start (no Supabase, no Docker)
 
-- Node.js 20+ (built with Node 22)
-- [Supabase CLI](https://supabase.com/docs/guides/cli) and Docker (for local dev)
-
-## Getting started (clean checkout)
+The fastest way to see the app. Runs in **demo mode**: authentication is
+bypassed and a demo user is used, so there is nothing to install or configure
+beyond the app itself.
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Configure environment
-cp .env.example .env.local
-# The defaults in .env.example are the standard local Supabase values and work
-# as-is for local development. For production, fill in your hosted project's URL
-# and anon key.
-
-# 3. Start local Supabase (Postgres + Auth). Requires Docker.
-supabase start
-
-# 4. Apply all migrations and seed the local dev owner account
-supabase db reset
-
-# 5. Run the app
+cp .env.example .env.local   # ships with NEXT_PUBLIC_DEMO_MODE=true
 npm run dev
 ```
 
-Open http://localhost:3000 and sign in with the seeded local owner:
+Open http://localhost:3000 — you land straight on the dashboard. A **Demo**
+badge in the header marks this mode. This is all you need to click around the
+shell, navigation, and dashboard.
+
+Prerequisite: Node.js 20+ (built with Node 22).
+
+## Full setup (real auth + data with Supabase)
+
+When you're ready for real login and a database, turn demo mode off and bring up
+Supabase locally. Additional prerequisites: [Supabase CLI](https://supabase.com/docs/guides/cli) and Docker.
+
+```bash
+# In .env.local, set:
+#   NEXT_PUBLIC_DEMO_MODE=false
+
+supabase start        # Postgres + Auth (needs Docker)
+supabase db reset     # apply all migrations + seed the local owner account
+npm run dev
+```
+
+Then sign in with the seeded local owner:
 
 - **Email:** `owner@studywiser.local`
 - **Password:** `DevPassword123!`

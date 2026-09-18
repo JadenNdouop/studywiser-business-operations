@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { DEMO_MODE } from "@/lib/demo-mode";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config";
 
 /** Routes an unauthenticated visitor is allowed to reach. */
@@ -25,6 +26,11 @@ function isPublicRoute(pathname: string) {
  */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
+
+  // Demo mode: no backend, no auth — let every request through.
+  if (DEMO_MODE) {
+    return supabaseResponse;
+  }
 
   // If env vars are missing (e.g. before setup), don't crash every request —
   // let the page render and surface the configuration error itself.

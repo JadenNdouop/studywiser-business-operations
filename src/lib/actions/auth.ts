@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
+import { DEMO_MODE } from "@/lib/demo-mode";
 
 export type AuthState = {
   error?: string;
@@ -43,6 +44,10 @@ export async function login(
 
 /** Sign out and return to the login page. */
 export async function logout(): Promise<void> {
+  // In demo mode there is no session to end; stay in the app.
+  if (DEMO_MODE) {
+    redirect("/dashboard");
+  }
   const supabase = await createClient();
   await supabase.auth.signOut();
   revalidatePath("/", "layout");

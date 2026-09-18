@@ -3,6 +3,7 @@
 import { LogOut } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth";
+import { DEMO_MODE } from "@/lib/demo-mode";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,15 +63,21 @@ export function UserMenu({
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <form action={logout}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive outline-none transition-colors hover:bg-accent focus:bg-accent"
-          >
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </button>
-        </form>
+        {DEMO_MODE ? (
+          <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            Demo mode · sign-in disabled
+          </p>
+        ) : (
+          <form action={logout}>
+            <button
+              type="submit"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive outline-none transition-colors hover:bg-accent focus:bg-accent"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </form>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
