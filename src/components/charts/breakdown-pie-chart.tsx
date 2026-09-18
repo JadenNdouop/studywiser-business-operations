@@ -1,12 +1,13 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
 
 import {
   CHART_COLORS,
   ChartTooltip,
   type TooltipEntry,
 } from "./chart-primitives";
+import { ResponsiveChart } from "./responsive-chart";
 
 interface BreakdownDatum {
   name: string;
@@ -30,8 +31,9 @@ export function BreakdownPieChart({
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <PieChart>
+    <ResponsiveChart height={height}>
+      {({ width, height: h }) => (
+      <PieChart width={width} height={h}>
         <Tooltip
           content={
             <ChartTooltip
@@ -59,7 +61,8 @@ export function BreakdownPieChart({
           ))}
         </Pie>
       </PieChart>
-    </ResponsiveContainer>
+      )}
+    </ResponsiveChart>
   );
 }
 

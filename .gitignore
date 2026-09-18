@@ -38,12 +38,12 @@ yarn-error.log*
 /supabase/.branches
 /supabase/.temp
 
+# transfer archives used to sync between environments
+*.tgz
+
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# transfer archives used to sync between environments
-*.tgz
