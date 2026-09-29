@@ -10,7 +10,15 @@ import * as React from "react";
 
 import type { OperationsData } from "./seed";
 import { seedData } from "./seed";
-import type { BusinessEvent, Project, Task } from "./types";
+import type {
+  BusinessDocument,
+  BusinessEvent,
+  Project,
+  Sop,
+  Subscription,
+  Task,
+  Vendor,
+} from "./types";
 
 const STORAGE_KEY = "studywiser_operations_v1";
 
@@ -31,6 +39,16 @@ export type NewTask = Partial<Omit<Task, "id" | "created_at" | "completed_at">> 
   Pick<Task, "title">;
 export type NewEvent = Partial<Omit<BusinessEvent, "id" | "created_at">> &
   Pick<BusinessEvent, "title" | "event_date">;
+export type NewVendor = Partial<Omit<Vendor, "id" | "created_at">> &
+  Pick<Vendor, "name">;
+export type NewSubscription = Partial<
+  Omit<Subscription, "id" | "created_at">
+> &
+  Pick<Subscription, "service_name">;
+export type NewDocument = Partial<Omit<BusinessDocument, "id" | "created_at">> &
+  Pick<BusinessDocument, "title" | "external_url">;
+export type NewSop = Partial<Omit<Sop, "id" | "updated_at" | "version">> &
+  Pick<Sop, "title" | "content">;
 
 interface OperationsContextValue {
   ready: boolean;
@@ -49,6 +67,24 @@ interface OperationsContextValue {
   createEvent: (input: NewEvent) => string;
   updateEvent: (id: string, patch: Partial<BusinessEvent>) => void;
   deleteEvent: (id: string) => void;
+  vendors: Vendor[];
+  subscriptions: Subscription[];
+  documents: BusinessDocument[];
+  sops: Sop[];
+  getVendor: (id: string) => Vendor | undefined;
+  createVendor: (input: NewVendor) => string;
+  updateVendor: (id: string, patch: Partial<Vendor>) => void;
+  deleteVendor: (id: string) => void;
+  createSubscription: (input: NewSubscription) => string;
+  updateSubscription: (id: string, patch: Partial<Subscription>) => void;
+  deleteSubscription: (id: string) => void;
+  createDocument: (input: NewDocument) => string;
+  updateDocument: (id: string, patch: Partial<BusinessDocument>) => void;
+  deleteDocument: (id: string) => void;
+  getSop: (id: string) => Sop | undefined;
+  createSop: (input: NewSop) => string;
+  updateSop: (id: string, patch: Partial<Sop>) => void;
+  deleteSop: (id: string) => void;
   resetToSeed: () => void;
 }
 
@@ -56,7 +92,15 @@ const OperationsContext = React.createContext<OperationsContextValue | null>(
   null,
 );
 
-const EMPTY: OperationsData = { projects: [], tasks: [], events: [] };
+const EMPTY: OperationsData = {
+  projects: [],
+  tasks: [],
+  events: [],
+  vendors: [],
+  subscriptions: [],
+  documents: [],
+  sops: [],
+};
 
 export function OperationsProvider({
   children,
@@ -202,6 +246,122 @@ export function OperationsProvider({
           ...d,
           events: d.events.filter((e) => e.id !== id),
         })),
+
+      // --- Vendors ---
+      vendors: data.vendors,
+      getVendor: (id) => data.vendors.find((v) => v.id === id),
+      createVendor: (input) => {
+        const id = newId();
+        const vendor: Vendor = {
+          status: "active",
+          ...input,
+          id,
+          created_at: now(),
+        };
+        setData((d) => ({ ...d, vendors: [vendor, ...d.vendors] }));
+        return id;
+      },
+      updateVendor: (id, patch) =>
+        setData((d) => ({
+          ...d,
+          vendors: d.vendors.map((v) =>
+            v.id === id ? { ...v, ...patch, id: v.id } : v,
+          ),
+        })),
+      deleteVendor: (id) =>
+        setData((d) => ({
+          ...d,
+          vendors: d.vendors.filter((v) => v.id !== id),
+          // Subscriptions survive; they detach from the deleted vendor.
+          subscriptions: d.subscriptions.map((s) =>
+            s.vendor_id === id ? { ...s, vendor_id: undefined } : s,
+          ),
+        })),
+
+      // --- Subscriptions ---
+      subscriptions: data.subscriptions,
+      createSubscription: (input) => {
+        const id = newId();
+        const sub: Subscription = {
+          status: "active",
+          ...input,
+          id,
+          created_at: now(),
+        };
+        setData((d) => ({
+          ...d,
+          subscriptions: [sub, ...d.subscriptions],
+        }));
+        return id;
+      },
+      updateSubscription: (id, patch) =>
+        setData((d) => ({
+          ...d,
+          subscriptions: d.subscriptions.map((s) =>
+            s.id === id ? { ...s, ...patch, id: s.id } : s,
+          ),
+        })),
+      deleteSubscription: (id) =>
+        setData((d) => ({
+          ...d,
+          subscriptions: d.subscriptions.filter((s) => s.id !== id),
+        })),
+
+      // --- Documents ---
+      documents: data.documents,
+      createDocument: (input) => {
+        const id = newId();
+        const doc: BusinessDocument = {
+          ...input,
+          id,
+          created_at: now(),
+        };
+        setData((d) => ({ ...d, documents: [doc, ...d.documents] }));
+        return id;
+      },
+      updateDocument: (id, patch) =>
+        setData((d) => ({
+          ...d,
+          documents: d.documents.map((doc) =>
+            doc.id === id ? { ...doc, ...patch, id: doc.id } : doc,
+          ),
+        })),
+      deleteDocument: (id) =>
+        setData((d) => ({
+          ...d,
+          documents: d.documents.filter((doc) => doc.id !== id),
+        })),
+
+      // --- SOPs ---
+      sops: data.sops,
+      getSop: (id) => data.sops.find((s) => s.id === id),
+      createSop: (input) => {
+        const id = newId();
+        const sop: Sop = {
+          status: "active",
+          version: 1,
+          ...input,
+          id,
+          updated_at: now(),
+        };
+        setData((d) => ({ ...d, sops: [sop, ...d.sops] }));
+        return id;
+      },
+      updateSop: (id, patch) =>
+        setData((d) => ({
+          ...d,
+          sops: d.sops.map((s) =>
+            s.id === id
+              ? { ...s, ...patch, id: s.id, updated_at: now() }
+              : s,
+          ),
+        })),
+      deleteSop: (id) =>
+        setData((d) => ({
+          ...d,
+          sops: d.sops.filter((s) => s.id !== id),
+        })),
+
       resetToSeed: () => setData(seedData()),
     };
   }, [data, ready]);
