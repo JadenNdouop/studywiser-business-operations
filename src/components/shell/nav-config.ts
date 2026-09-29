@@ -79,9 +79,9 @@ export const navGroups: NavGroup[] = [
     label: "Workforce",
     icon: Briefcase,
     items: [
-      { title: "Workers", href: "/workforce", icon: Users, phase: 4 },
-      { title: "Compensation", href: "/workforce/compensation", icon: Wallet, phase: 4 },
-      { title: "Record Payment", href: "/workforce/payments/new", icon: CreditCard, phase: 4 },
+      { title: "Workers", href: "/workforce", icon: Users, phase: 4, ready: true },
+      { title: "Compensation", href: "/workforce/compensation", icon: Wallet, phase: 4, ready: true },
+      { title: "Record Payment", href: "/workforce/payments/new", icon: CreditCard, phase: 4, ready: true },
       { title: "Workforce Analytics", href: "/workforce/workforce-analytics", icon: BarChart3, phase: 6 },
     ],
   },
