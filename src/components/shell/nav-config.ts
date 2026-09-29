@@ -89,9 +89,9 @@ export const navGroups: NavGroup[] = [
     label: "Operations",
     icon: FolderKanban,
     items: [
-      { title: "Projects", href: "/operations/projects", icon: FolderKanban, phase: 5 },
-      { title: "Tasks", href: "/operations/tasks", icon: ListChecks, phase: 5 },
-      { title: "Calendar", href: "/operations/calendar", icon: CalendarDays, phase: 5 },
+      { title: "Projects", href: "/operations/projects", icon: FolderKanban, phase: 5, ready: true },
+      { title: "Tasks", href: "/operations/tasks", icon: ListChecks, phase: 5, ready: true },
+      { title: "Calendar", href: "/operations/calendar", icon: CalendarDays, phase: 5, ready: true },
       { title: "Vendors", href: "/operations/vendors", icon: Building2, phase: 5 },
       { title: "Subscriptions", href: "/operations/subscriptions", icon: Repeat, phase: 5 },
       { title: "Documents", href: "/operations/documents", icon: FileText, phase: 5 },
