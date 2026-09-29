@@ -102,6 +102,26 @@ const EMPTY: OperationsData = {
   sops: [],
 };
 
+/**
+ * Normalize data loaded from localStorage. The operations domain grew new
+ * collections (vendors, subscriptions, documents, sops) after some browsers had
+ * already saved the older shape — so any collection that's missing is filled
+ * from seed, while whatever the user already had is kept intact. Without this,
+ * an old cache would leave e.g. `vendors` undefined and crash the vendors table.
+ */
+function migrate(loaded: Partial<OperationsData>): OperationsData {
+  const seeded = seedData();
+  return {
+    projects: loaded.projects ?? seeded.projects,
+    tasks: loaded.tasks ?? seeded.tasks,
+    events: loaded.events ?? seeded.events,
+    vendors: loaded.vendors ?? seeded.vendors,
+    subscriptions: loaded.subscriptions ?? seeded.subscriptions,
+    documents: loaded.documents ?? seeded.documents,
+    sops: loaded.sops ?? seeded.sops,
+  };
+}
+
 export function OperationsProvider({
   children,
 }: {
@@ -111,15 +131,15 @@ export function OperationsProvider({
   const [ready, setReady] = React.useState(false);
 
   React.useEffect(() => {
-    let loaded: OperationsData | null = null;
+    let loaded: Partial<OperationsData> | null = null;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) loaded = JSON.parse(raw) as OperationsData;
+      if (raw) loaded = JSON.parse(raw) as Partial<OperationsData>;
     } catch {
       loaded = null;
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setData(loaded ?? seedData());
+    setData(loaded ? migrate(loaded) : seedData());
     setReady(true);
   }, []);
 

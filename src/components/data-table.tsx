@@ -66,7 +66,7 @@ const alignClass = {
 
 export function DataTable<T>({
   columns,
-  data,
+  data = [],
   rowKey,
   isLoading = false,
   searchable = true,
