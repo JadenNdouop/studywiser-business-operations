@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/shell/app-shell";
+import { AppProviders } from "@/components/app-providers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { DEMO_MODE, DEMO_USER } from "@/lib/demo-mode";
 
@@ -21,7 +22,7 @@ export default async function AppLayout({
         roles: user.roles,
       }}
     >
-      {children}
+      <AppProviders>{children}</AppProviders>
     </AppShell>
   );
 }

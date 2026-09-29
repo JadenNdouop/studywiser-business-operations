@@ -1,9 +1,7 @@
-import { CrmProvider } from "@/lib/crm/store";
-
 /**
- * Wraps every /crm/* page in the CRM store provider, so leads, clients, and
- * activities are available (and persisted) across all the CRM screens.
+ * The CRM store now lives in <AppProviders> at the app root (so cross-domain
+ * screens can read it too), so this layout is just a passthrough.
  */
 export default function CrmLayout({ children }: { children: React.ReactNode }) {
-  return <CrmProvider>{children}</CrmProvider>;
+  return children;
 }

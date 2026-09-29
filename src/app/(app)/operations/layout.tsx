@@ -1,9 +1,11 @@
-import { OperationsProvider } from "@/lib/operations/store";
-
+/**
+ * The Operations store now lives in <AppProviders> at the app root, so this
+ * layout is just a passthrough.
+ */
 export default function OperationsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <OperationsProvider>{children}</OperationsProvider>;
+  return children;
 }
