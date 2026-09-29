@@ -69,10 +69,10 @@ export const navGroups: NavGroup[] = [
     label: "CRM & Sales",
     icon: Contact,
     items: [
-      { title: "Leads", href: "/crm/leads", icon: Target, phase: 2 },
-      { title: "Pipeline", href: "/crm/pipeline", icon: FolderKanban, phase: 2 },
-      { title: "Clients", href: "/crm/clients", icon: Users, phase: 2 },
-      { title: "Sales Analytics", href: "/crm/sales-analytics", icon: BarChart3, phase: 6 },
+      { title: "Leads", href: "/crm/leads", icon: Target, phase: 2, ready: true },
+      { title: "Pipeline", href: "/crm/pipeline", icon: FolderKanban, phase: 2, ready: true },
+      { title: "Clients", href: "/crm/clients", icon: Users, phase: 2, ready: true },
+      { title: "Sales Analytics", href: "/crm/sales-analytics", icon: BarChart3, phase: 2, ready: true },
     ],
   },
   {
