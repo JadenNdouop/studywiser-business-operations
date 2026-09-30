@@ -85,13 +85,6 @@ export function LoginForm({
             Sign in
           </SubmitButton>
         </form>
-
-        {process.env.NODE_ENV !== "production" && (
-          <p className="mt-4 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-            <span className="font-medium">Local dev account:</span>{" "}
-            owner@studywiser.local / DevPassword123!
-          </p>
-        )}
       </CardContent>
     </Card>
   );
