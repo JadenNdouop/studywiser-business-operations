@@ -62,7 +62,7 @@ export const navGroups: NavGroup[] = [
       { title: "Receivables", href: "/finance/receivables", icon: Wallet, phase: 3, ready: true },
       { title: "Payables", href: "/finance/payables", icon: Wallet, phase: 3, ready: true },
       { title: "Profit & Loss", href: "/finance/profit-loss", icon: BarChart3, phase: 3, ready: true },
-      { title: "Financial Analytics", href: "/finance/financial-analytics", icon: BarChart3, phase: 6 },
+      { title: "Financial Analytics", href: "/finance/financial-analytics", icon: BarChart3, phase: 6, ready: true },
     ],
   },
   {
@@ -82,7 +82,7 @@ export const navGroups: NavGroup[] = [
       { title: "Workers", href: "/workforce", icon: Users, phase: 4, ready: true },
       { title: "Compensation", href: "/workforce/compensation", icon: Wallet, phase: 4, ready: true },
       { title: "Record Payment", href: "/workforce/payments/new", icon: CreditCard, phase: 4, ready: true },
-      { title: "Workforce Analytics", href: "/workforce/workforce-analytics", icon: BarChart3, phase: 6 },
+      { title: "Workforce Analytics", href: "/workforce/workforce-analytics", icon: BarChart3, phase: 6, ready: true },
     ],
   },
   {
@@ -102,7 +102,7 @@ export const navGroups: NavGroup[] = [
     label: "Business Intelligence",
     icon: BarChart3,
     items: [
-      { title: "Analytics", href: "/analytics", icon: BarChart3, phase: 6 },
+      { title: "Analytics", href: "/analytics", icon: BarChart3, phase: 6, ready: true },
     ],
   },
   {
