@@ -1,13 +1,18 @@
 "use client";
 
 /**
- * CRM store — the demo-mode "backend".
+ * CRM store — the data layer for leads, clients, and activities.
  *
- * Holds leads, clients, and activities in React state and persists them to the
- * browser's localStorage, so data the user enters survives refreshes. This is
- * the ONE place that knows how data is stored: when the real Supabase backend
- * is turned on later, only this file changes — every screen keeps calling the
- * same useCrm() methods.
+ * ONE place knows how data is stored. It runs in two modes, chosen by the
+ * NEXT_PUBLIC_DEMO_MODE flag:
+ *   • Demo mode  → React state persisted to localStorage (no backend needed).
+ *   • Live mode  → Supabase (Postgres + RLS) under the signed-in user.
+ * Every screen calls the same useCrm() methods either way.
+ *
+ * Live-mode writes are optimistic: we update local state immediately (so the
+ * UI stays snappy and IDs are available synchronously), then send the write to
+ * Supabase. If a write fails we log it and refetch, so the screen re-syncs with
+ * the server's truth instead of silently drifting.
  */
 
 import * as React from "react";
@@ -21,6 +26,8 @@ import type {
   LeadActivity,
   PipelineStage,
 } from "./types";
+import { DEMO_MODE } from "@/lib/demo-mode";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 const STORAGE_KEY = "studywiser_crm_v1";
 
@@ -33,6 +40,12 @@ function newId(): string {
   } catch {
     return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
+}
+/** Drop the primary key from an update payload. */
+function withoutId<T extends { id?: string }>(patch: T): Partial<T> {
+  const rest = { ...patch };
+  delete rest.id;
+  return rest;
 }
 
 export type NewLead = Partial<Omit<Lead, "id" | "created_at" | "updated_at">> &
@@ -71,35 +84,81 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = React.useState<CrmData>(EMPTY);
   const [ready, setReady] = React.useState(false);
 
-  // Load once on mount (client only), seeding on first run.
-  React.useEffect(() => {
-    let loaded: CrmData | null = null;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) loaded = JSON.parse(raw) as CrmData;
-    } catch {
-      loaded = null;
-    }
-    // One-time hydration from localStorage on mount (kept in an effect so the
-    // server and first client render match, avoiding a hydration mismatch).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setData(loaded ?? seedData());
-    setReady(true);
-  }, []);
+  // One Supabase client for the provider's lifetime (null in demo mode).
+  const supabase = React.useMemo(
+    () => (DEMO_MODE ? null : createSupabaseClient()),
+    [],
+  );
 
-  // Persist on every change once loaded.
+  // Pull the whole CRM dataset from Supabase into local state.
+  const reload = React.useCallback(async () => {
+    if (!supabase) return;
+    const [leadsRes, clientsRes, actsRes] = await Promise.all([
+      supabase.from("leads").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("clients")
+        .select("*")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("lead_activities")
+        .select("*")
+        .order("occurred_at", { ascending: false }),
+    ]);
+    setData({
+      leads: (leadsRes.data ?? []) as Lead[],
+      clients: (clientsRes.data ?? []) as Client[],
+      activities: (actsRes.data ?? []) as LeadActivity[],
+    });
+  }, [supabase]);
+
+  // Initial load: localStorage (demo) or Supabase (live).
   React.useEffect(() => {
-    if (!ready) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // storage full / unavailable — keep working from memory
+    if (DEMO_MODE) {
+      let loaded: CrmData | null = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) loaded = JSON.parse(raw) as CrmData;
+      } catch {
+        loaded = null;
+      }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setData(loaded ?? seedData());
+      setReady(true);
+    } else {
+      reload().finally(() => setReady(true));
+    }
+  }, [reload]);
+
+  // Persist to localStorage in demo mode only.
+  React.useEffect(() => {
+    if (DEMO_MODE && ready) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch {
+        // storage full / unavailable — keep working from memory
+      }
     }
   }, [data, ready]);
 
   const api = React.useMemo<CrmContextValue>(() => {
     const getLead = (id: string) => data.leads.find((l) => l.id === id);
     const getClient = (id: string) => data.clients.find((c) => c.id === id);
+
+    /** Run a live-mode write; on failure, log and refetch to resync. */
+    function fire(run: () => Promise<void>) {
+      if (!supabase) return; // demo mode: local state + localStorage is enough
+      run().catch((err) => {
+        console.error("[crm] write failed, resyncing:", err);
+        void reload();
+      });
+    }
+
+    async function assertNoError(
+      p: PromiseLike<{ error: unknown }>,
+    ): Promise<void> {
+      const { error } = await p;
+      if (error) throw error;
+    }
 
     function createLead(input: NewLead): string {
       const id = newId();
@@ -113,6 +172,7 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
         updated_at: ts,
       };
       setData((d) => ({ ...d, leads: [lead, ...d.leads] }));
+      fire(() => assertNoError(supabase!.from("leads").insert(lead)));
       return id;
     }
 
@@ -123,6 +183,11 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
           l.id === id ? { ...l, ...patch, id: l.id, updated_at: now() } : l,
         ),
       }));
+      fire(() =>
+        assertNoError(
+          supabase!.from("leads").update(withoutId(patch)).eq("id", id),
+        ),
+      );
     }
 
     function deleteLead(id: string) {
@@ -131,13 +196,16 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
         leads: d.leads.filter((l) => l.id !== id),
         activities: d.activities.filter((a) => a.lead_id !== id),
       }));
+      // lead_activities cascade-delete in the DB via FK.
+      fire(() => assertNoError(supabase!.from("leads").delete().eq("id", id)));
     }
 
     function addActivity(leadId: string, input: NewActivity) {
+      const ts = now();
       const activity: LeadActivity = {
         id: newId(),
         lead_id: leadId,
-        occurred_at: now(),
+        occurred_at: ts,
         ...input,
       };
       setData((d) => ({
@@ -145,29 +213,47 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
         activities: [activity, ...d.activities],
         leads: d.leads.map((l) =>
           l.id === leadId
-            ? { ...l, last_contact_date: now().slice(0, 10), updated_at: now() }
+            ? { ...l, last_contact_date: ts.slice(0, 10), updated_at: ts }
             : l,
         ),
       }));
+      fire(async () => {
+        await assertNoError(supabase!.from("lead_activities").insert(activity));
+        await assertNoError(
+          supabase!
+            .from("leads")
+            .update({ last_contact_date: ts.slice(0, 10) })
+            .eq("id", leadId),
+        );
+      });
     }
 
     function setLeadStage(id: string, stage: PipelineStage) {
       const lead = getLead(id);
       if (!lead || lead.pipeline_stage === stage) return;
+      const ts = now();
       const activity: LeadActivity = {
         id: newId(),
         lead_id: id,
         activity_type: "stage_change",
         notes: `Stage changed to ${stage.replace(/_/g, " ")}.`,
-        occurred_at: now(),
+        occurred_at: ts,
       };
       setData((d) => ({
         ...d,
         leads: d.leads.map((l) =>
-          l.id === id ? { ...l, pipeline_stage: stage, updated_at: now() } : l,
+          l.id === id ? { ...l, pipeline_stage: stage, updated_at: ts } : l,
         ),
         activities: [activity, ...d.activities],
       }));
+      fire(async () => {
+        await assertNoError(
+          supabase!.from("leads").update({ pipeline_stage: stage }).eq("id", id),
+        );
+        await assertNoError(
+          supabase!.from("lead_activities").insert(activity),
+        );
+      });
     }
 
     function convertLead(id: string): string | undefined {
@@ -216,6 +302,19 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
         ),
         activities: [activity, ...d.activities],
       }));
+      fire(async () => {
+        await assertNoError(supabase!.from("clients").insert(client));
+        await assertNoError(
+          supabase!
+            .from("leads")
+            .update({
+              pipeline_stage: "converted",
+              converted_client_id: clientId,
+            })
+            .eq("id", id),
+        );
+        await assertNoError(supabase!.from("lead_activities").insert(activity));
+      });
       return clientId;
     }
 
@@ -230,6 +329,7 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
         updated_at: ts,
       };
       setData((d) => ({ ...d, clients: [client, ...d.clients] }));
+      fire(() => assertNoError(supabase!.from("clients").insert(client)));
       return id;
     }
 
@@ -240,6 +340,11 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
           c.id === id ? { ...c, ...patch, id: c.id, updated_at: now() } : c,
         ),
       }));
+      fire(() =>
+        assertNoError(
+          supabase!.from("clients").update(withoutId(patch)).eq("id", id),
+        ),
+      );
     }
 
     function deleteClient(id: string) {
@@ -247,6 +352,7 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
         ...d,
         clients: d.clients.filter((c) => c.id !== id),
       }));
+      fire(() => assertNoError(supabase!.from("clients").delete().eq("id", id)));
     }
 
     return {
@@ -270,9 +376,12 @@ export function CrmProvider({ children }: { children: React.ReactNode }) {
       updateClient,
       updateClientStatus: (id, status) => updateClient(id, { status }),
       deleteClient,
-      resetToSeed: () => setData(seedData()),
+      resetToSeed: () => {
+        if (DEMO_MODE) setData(seedData());
+        else void reload();
+      },
     };
-  }, [data, ready]);
+  }, [data, ready, supabase, reload]);
 
   return <CrmContext.Provider value={api}>{children}</CrmContext.Provider>;
 }
