@@ -1,9 +1,17 @@
 "use client";
 
 /**
- * Operations store — the demo-mode "backend" for projects, tasks, and the
- * business calendar. Same pattern as CRM/Finance/Workforce: React state
- * persisted to localStorage, one place that knows how data is stored.
+ * Operations store — projects, tasks, calendar events, vendors, subscriptions,
+ * documents, and SOPs.
+ *
+ * Two modes (NEXT_PUBLIC_DEMO_MODE): localStorage in demo mode, Supabase
+ * (Postgres + RLS, signed-in user) in live mode. Same useOperations() API.
+ * Live writes are optimistic with revert-on-error (log + refetch).
+ *
+ * Shape note: the app keeps a free-text owner/assignee name; the database stores
+ * those in *_name text columns (the uuid link columns are reserved for a future
+ * user-picker). We map owner→owner_name / assignee→assignee_name on the way in
+ * and out.
  */
 
 import * as React from "react";
@@ -19,6 +27,8 @@ import type {
   Task,
   Vendor,
 } from "./types";
+import { DEMO_MODE } from "@/lib/demo-mode";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 
 const STORAGE_KEY = "studywiser_operations_v1";
 
@@ -33,6 +43,61 @@ function newId(): string {
   }
 }
 
+/** Rename one key (and drop the primary key) for a DB update payload. */
+function renameKey(
+  obj: Record<string, unknown>,
+  from: string,
+  to: string,
+): Record<string, unknown> {
+  const o = { ...obj };
+  if (from in o) {
+    o[to] = o[from];
+    delete o[from];
+  }
+  delete o.id;
+  return o;
+}
+/** Drop the primary key from an update payload. */
+function stripId(obj: Record<string, unknown>): Record<string, unknown> {
+  const o = { ...obj };
+  delete o.id;
+  return o;
+}
+// Row mappers: app object -> DB row (owner/assignee become *_name columns).
+function toProjectRow(p: Project) {
+  const { owner, ...rest } = p;
+  return { ...rest, owner_name: owner ?? null };
+}
+function toTaskRow(t: Task) {
+  const { assignee, ...rest } = t;
+  return { ...rest, assignee_name: assignee ?? null };
+}
+function toSubRow(s: Subscription) {
+  const { owner, ...rest } = s;
+  return { ...rest, owner_name: owner ?? null };
+}
+function toSopRow(s: Sop) {
+  const { owner, ...rest } = s;
+  return { ...rest, owner_name: owner ?? null };
+}
+// DB row -> app object.
+function fromProjectRow(r: Record<string, unknown>): Project {
+  const { owner_name, ...rest } = r;
+  return { ...(rest as unknown as Project), owner: (owner_name as string) ?? undefined };
+}
+function fromTaskRow(r: Record<string, unknown>): Task {
+  const { assignee_name, ...rest } = r;
+  return { ...(rest as unknown as Task), assignee: (assignee_name as string) ?? undefined };
+}
+function fromSubRow(r: Record<string, unknown>): Subscription {
+  const { owner_name, ...rest } = r;
+  return { ...(rest as unknown as Subscription), owner: (owner_name as string) ?? undefined };
+}
+function fromSopRow(r: Record<string, unknown>): Sop {
+  const { owner_name, ...rest } = r;
+  return { ...(rest as unknown as Sop), owner: (owner_name as string) ?? undefined };
+}
+
 export type NewProject = Partial<Omit<Project, "id" | "created_at" | "updated_at">> &
   Pick<Project, "name">;
 export type NewTask = Partial<Omit<Task, "id" | "created_at" | "completed_at">> &
@@ -41,9 +106,7 @@ export type NewEvent = Partial<Omit<BusinessEvent, "id" | "created_at">> &
   Pick<BusinessEvent, "title" | "event_date">;
 export type NewVendor = Partial<Omit<Vendor, "id" | "created_at">> &
   Pick<Vendor, "name">;
-export type NewSubscription = Partial<
-  Omit<Subscription, "id" | "created_at">
-> &
+export type NewSubscription = Partial<Omit<Subscription, "id" | "created_at">> &
   Pick<Subscription, "service_name">;
 export type NewDocument = Partial<Omit<BusinessDocument, "id" | "created_at">> &
   Pick<BusinessDocument, "title" | "external_url">;
@@ -102,13 +165,7 @@ const EMPTY: OperationsData = {
   sops: [],
 };
 
-/**
- * Normalize data loaded from localStorage. The operations domain grew new
- * collections (vendors, subscriptions, documents, sops) after some browsers had
- * already saved the older shape — so any collection that's missing is filled
- * from seed, while whatever the user already had is kept intact. Without this,
- * an old cache would leave e.g. `vendors` undefined and crash the vendors table.
- */
+/** Fill any collection missing from an older localStorage cache from seed. */
 function migrate(loaded: Partial<OperationsData>): OperationsData {
   const seeded = seedData();
   return {
@@ -130,29 +187,74 @@ export function OperationsProvider({
   const [data, setData] = React.useState<OperationsData>(EMPTY);
   const [ready, setReady] = React.useState(false);
 
-  React.useEffect(() => {
-    let loaded: Partial<OperationsData> | null = null;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) loaded = JSON.parse(raw) as Partial<OperationsData>;
-    } catch {
-      loaded = null;
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setData(loaded ? migrate(loaded) : seedData());
-    setReady(true);
-  }, []);
+  const supabase = React.useMemo(
+    () => (DEMO_MODE ? null : createSupabaseClient()),
+    [],
+  );
+
+  const reload = React.useCallback(async () => {
+    if (!supabase) return;
+    const [pRes, tRes, eRes, vRes, sRes, dRes, soRes] = await Promise.all([
+      supabase.from("projects").select("*").order("created_at", { ascending: false }),
+      supabase.from("tasks").select("*").order("created_at", { ascending: false }),
+      supabase.from("business_events").select("*").order("event_date", { ascending: false }),
+      supabase.from("vendors").select("*").order("created_at", { ascending: false }),
+      supabase.from("subscriptions").select("*").order("created_at", { ascending: false }),
+      supabase.from("documents").select("*").order("created_at", { ascending: false }),
+      supabase.from("sops").select("*").order("updated_at", { ascending: false }),
+    ]);
+    setData({
+      projects: ((pRes.data ?? []) as Record<string, unknown>[]).map(fromProjectRow),
+      tasks: ((tRes.data ?? []) as Record<string, unknown>[]).map(fromTaskRow),
+      events: (eRes.data ?? []) as BusinessEvent[],
+      vendors: (vRes.data ?? []) as Vendor[],
+      subscriptions: ((sRes.data ?? []) as Record<string, unknown>[]).map(fromSubRow),
+      documents: (dRes.data ?? []) as BusinessDocument[],
+      sops: ((soRes.data ?? []) as Record<string, unknown>[]).map(fromSopRow),
+    });
+  }, [supabase]);
 
   React.useEffect(() => {
-    if (!ready) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // ignore
+    if (DEMO_MODE) {
+      let loaded: Partial<OperationsData> | null = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) loaded = JSON.parse(raw) as Partial<OperationsData>;
+      } catch {
+        loaded = null;
+      }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setData(loaded ? migrate(loaded) : seedData());
+      setReady(true);
+    } else {
+      reload().finally(() => setReady(true));
+    }
+  }, [reload]);
+
+  React.useEffect(() => {
+    if (DEMO_MODE && ready) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch {
+        // ignore
+      }
     }
   }, [data, ready]);
 
   const api = React.useMemo<OperationsContextValue>(() => {
+    function fire(run: () => Promise<void>) {
+      if (!supabase) return;
+      run().catch((err) => {
+        console.error("[operations] write failed, resyncing:", err);
+        void reload();
+      });
+    }
+    async function ok(p: PromiseLike<{ error: unknown }>): Promise<void> {
+      const { error } = await p;
+      if (error) throw error;
+    }
+
+    // ----- Projects -----
     function createProject(input: NewProject): string {
       const id = newId();
       const ts = now();
@@ -164,9 +266,38 @@ export function OperationsProvider({
         updated_at: ts,
       };
       setData((d) => ({ ...d, projects: [project, ...d.projects] }));
+      fire(() => ok(supabase!.from("projects").insert(toProjectRow(project))));
       return id;
     }
+    function updateProject(id: string, patch: Partial<Project>) {
+      setData((d) => ({
+        ...d,
+        projects: d.projects.map((p) =>
+          p.id === id ? { ...p, ...patch, id: p.id, updated_at: now() } : p,
+        ),
+      }));
+      fire(() =>
+        ok(
+          supabase!
+            .from("projects")
+            .update(renameKey(patch, "owner", "owner_name"))
+            .eq("id", id),
+        ),
+      );
+    }
+    function deleteProject(id: string) {
+      setData((d) => ({
+        ...d,
+        projects: d.projects.filter((p) => p.id !== id),
+        tasks: d.tasks.map((t) =>
+          t.project_id === id ? { ...t, project_id: undefined } : t,
+        ),
+      }));
+      // tasks.project_id is ON DELETE SET NULL in the DB.
+      fire(() => ok(supabase!.from("projects").delete().eq("id", id)));
+    }
 
+    // ----- Tasks -----
     function createTask(input: NewTask): string {
       const id = newId();
       const task: Task = {
@@ -174,14 +305,28 @@ export function OperationsProvider({
         ...input,
         id,
         created_at: now(),
-        completed_at:
-          input.status === "completed" ? now() : undefined,
+        completed_at: input.status === "completed" ? now() : undefined,
       };
       setData((d) => ({ ...d, tasks: [task, ...d.tasks] }));
+      fire(() => ok(supabase!.from("tasks").insert(toTaskRow(task))));
       return id;
     }
-
+    function updateTask(id: string, patch: Partial<Task>) {
+      setData((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) => (t.id === id ? { ...t, ...patch, id: t.id } : t)),
+      }));
+      fire(() =>
+        ok(
+          supabase!
+            .from("tasks")
+            .update(renameKey(patch, "assignee", "assignee_name"))
+            .eq("id", id),
+        ),
+      );
+    }
     function setTaskStatus(id: string, status: Task["status"]) {
+      const completed_at = status === "completed" ? now() : undefined;
       setData((d) => ({
         ...d,
         tasks: d.tasks.map((t) =>
@@ -190,24 +335,159 @@ export function OperationsProvider({
                 ...t,
                 status,
                 completed_at:
-                  status === "completed"
-                    ? (t.completed_at ?? now())
-                    : undefined,
+                  status === "completed" ? (t.completed_at ?? now()) : undefined,
               }
             : t,
         ),
       }));
+      fire(() =>
+        ok(
+          supabase!
+            .from("tasks")
+            .update({ status, completed_at: completed_at ?? null })
+            .eq("id", id),
+        ),
+      );
+    }
+    function deleteTask(id: string) {
+      setData((d) => ({ ...d, tasks: d.tasks.filter((t) => t.id !== id) }));
+      fire(() => ok(supabase!.from("tasks").delete().eq("id", id)));
     }
 
+    // ----- Events -----
     function createEvent(input: NewEvent): string {
       const id = newId();
-      const event: BusinessEvent = {
-        ...input,
-        id,
-        created_at: now(),
-      };
+      const event: BusinessEvent = { ...input, id, created_at: now() };
       setData((d) => ({ ...d, events: [event, ...d.events] }));
+      fire(() => ok(supabase!.from("business_events").insert(event)));
       return id;
+    }
+    function updateEvent(id: string, patch: Partial<BusinessEvent>) {
+      setData((d) => ({
+        ...d,
+        events: d.events.map((e) => (e.id === id ? { ...e, ...patch, id: e.id } : e)),
+      }));
+      fire(() =>
+        ok(supabase!.from("business_events").update(stripId(patch)).eq("id", id)),
+      );
+    }
+    function deleteEvent(id: string) {
+      setData((d) => ({ ...d, events: d.events.filter((e) => e.id !== id) }));
+      fire(() => ok(supabase!.from("business_events").delete().eq("id", id)));
+    }
+
+    // ----- Vendors -----
+    function createVendor(input: NewVendor): string {
+      const id = newId();
+      const vendor: Vendor = { status: "active", ...input, id, created_at: now() };
+      setData((d) => ({ ...d, vendors: [vendor, ...d.vendors] }));
+      fire(() => ok(supabase!.from("vendors").insert(vendor)));
+      return id;
+    }
+    function updateVendor(id: string, patch: Partial<Vendor>) {
+      setData((d) => ({
+        ...d,
+        vendors: d.vendors.map((v) => (v.id === id ? { ...v, ...patch, id: v.id } : v)),
+      }));
+      fire(() =>
+        ok(supabase!.from("vendors").update(stripId(patch)).eq("id", id)),
+      );
+    }
+    function deleteVendor(id: string) {
+      setData((d) => ({
+        ...d,
+        vendors: d.vendors.filter((v) => v.id !== id),
+        subscriptions: d.subscriptions.map((s) =>
+          s.vendor_id === id ? { ...s, vendor_id: undefined } : s,
+        ),
+      }));
+      // subscriptions.vendor_id is ON DELETE SET NULL in the DB.
+      fire(() => ok(supabase!.from("vendors").delete().eq("id", id)));
+    }
+
+    // ----- Subscriptions -----
+    function createSubscription(input: NewSubscription): string {
+      const id = newId();
+      const sub: Subscription = { status: "active", ...input, id, created_at: now() };
+      setData((d) => ({ ...d, subscriptions: [sub, ...d.subscriptions] }));
+      fire(() => ok(supabase!.from("subscriptions").insert(toSubRow(sub))));
+      return id;
+    }
+    function updateSubscription(id: string, patch: Partial<Subscription>) {
+      setData((d) => ({
+        ...d,
+        subscriptions: d.subscriptions.map((s) =>
+          s.id === id ? { ...s, ...patch, id: s.id } : s,
+        ),
+      }));
+      fire(() =>
+        ok(
+          supabase!
+            .from("subscriptions")
+            .update(renameKey(patch, "owner", "owner_name"))
+            .eq("id", id),
+        ),
+      );
+    }
+    function deleteSubscription(id: string) {
+      setData((d) => ({
+        ...d,
+        subscriptions: d.subscriptions.filter((s) => s.id !== id),
+      }));
+      fire(() => ok(supabase!.from("subscriptions").delete().eq("id", id)));
+    }
+
+    // ----- Documents -----
+    function createDocument(input: NewDocument): string {
+      const id = newId();
+      const doc: BusinessDocument = { ...input, id, created_at: now() };
+      setData((d) => ({ ...d, documents: [doc, ...d.documents] }));
+      fire(() => ok(supabase!.from("documents").insert(doc)));
+      return id;
+    }
+    function updateDocument(id: string, patch: Partial<BusinessDocument>) {
+      setData((d) => ({
+        ...d,
+        documents: d.documents.map((doc) =>
+          doc.id === id ? { ...doc, ...patch, id: doc.id } : doc,
+        ),
+      }));
+      fire(() =>
+        ok(supabase!.from("documents").update(stripId(patch)).eq("id", id)),
+      );
+    }
+    function deleteDocument(id: string) {
+      setData((d) => ({ ...d, documents: d.documents.filter((doc) => doc.id !== id) }));
+      fire(() => ok(supabase!.from("documents").delete().eq("id", id)));
+    }
+
+    // ----- SOPs -----
+    function createSop(input: NewSop): string {
+      const id = newId();
+      const sop: Sop = { status: "active", version: 1, ...input, id, updated_at: now() };
+      setData((d) => ({ ...d, sops: [sop, ...d.sops] }));
+      fire(() => ok(supabase!.from("sops").insert(toSopRow(sop))));
+      return id;
+    }
+    function updateSop(id: string, patch: Partial<Sop>) {
+      setData((d) => ({
+        ...d,
+        sops: d.sops.map((s) =>
+          s.id === id ? { ...s, ...patch, id: s.id, updated_at: now() } : s,
+        ),
+      }));
+      fire(() =>
+        ok(
+          supabase!
+            .from("sops")
+            .update(renameKey(patch, "owner", "owner_name"))
+            .eq("id", id),
+        ),
+      );
+    }
+    function deleteSop(id: string) {
+      setData((d) => ({ ...d, sops: d.sops.filter((s) => s.id !== id) }));
+      fire(() => ok(supabase!.from("sops").delete().eq("id", id)));
     }
 
     return {
@@ -221,170 +501,39 @@ export function OperationsProvider({
           .filter((t) => t.project_id === projectId)
           .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")),
       createProject,
-      updateProject: (id, patch) =>
-        setData((d) => ({
-          ...d,
-          projects: d.projects.map((p) =>
-            p.id === id
-              ? { ...p, ...patch, id: p.id, updated_at: now() }
-              : p,
-          ),
-        })),
-      deleteProject: (id) =>
-        setData((d) => ({
-          ...d,
-          projects: d.projects.filter((p) => p.id !== id),
-          // Tasks survive; they just detach from the deleted project.
-          tasks: d.tasks.map((t) =>
-            t.project_id === id ? { ...t, project_id: undefined } : t,
-          ),
-        })),
+      updateProject,
+      deleteProject,
       createTask,
-      updateTask: (id, patch) =>
-        setData((d) => ({
-          ...d,
-          tasks: d.tasks.map((t) =>
-            t.id === id ? { ...t, ...patch, id: t.id } : t,
-          ),
-        })),
+      updateTask,
       setTaskStatus,
-      deleteTask: (id) =>
-        setData((d) => ({
-          ...d,
-          tasks: d.tasks.filter((t) => t.id !== id),
-        })),
+      deleteTask,
       createEvent,
-      updateEvent: (id, patch) =>
-        setData((d) => ({
-          ...d,
-          events: d.events.map((e) =>
-            e.id === id ? { ...e, ...patch, id: e.id } : e,
-          ),
-        })),
-      deleteEvent: (id) =>
-        setData((d) => ({
-          ...d,
-          events: d.events.filter((e) => e.id !== id),
-        })),
-
-      // --- Vendors ---
+      updateEvent,
+      deleteEvent,
       vendors: data.vendors,
-      getVendor: (id) => data.vendors.find((v) => v.id === id),
-      createVendor: (input) => {
-        const id = newId();
-        const vendor: Vendor = {
-          status: "active",
-          ...input,
-          id,
-          created_at: now(),
-        };
-        setData((d) => ({ ...d, vendors: [vendor, ...d.vendors] }));
-        return id;
-      },
-      updateVendor: (id, patch) =>
-        setData((d) => ({
-          ...d,
-          vendors: d.vendors.map((v) =>
-            v.id === id ? { ...v, ...patch, id: v.id } : v,
-          ),
-        })),
-      deleteVendor: (id) =>
-        setData((d) => ({
-          ...d,
-          vendors: d.vendors.filter((v) => v.id !== id),
-          // Subscriptions survive; they detach from the deleted vendor.
-          subscriptions: d.subscriptions.map((s) =>
-            s.vendor_id === id ? { ...s, vendor_id: undefined } : s,
-          ),
-        })),
-
-      // --- Subscriptions ---
       subscriptions: data.subscriptions,
-      createSubscription: (input) => {
-        const id = newId();
-        const sub: Subscription = {
-          status: "active",
-          ...input,
-          id,
-          created_at: now(),
-        };
-        setData((d) => ({
-          ...d,
-          subscriptions: [sub, ...d.subscriptions],
-        }));
-        return id;
-      },
-      updateSubscription: (id, patch) =>
-        setData((d) => ({
-          ...d,
-          subscriptions: d.subscriptions.map((s) =>
-            s.id === id ? { ...s, ...patch, id: s.id } : s,
-          ),
-        })),
-      deleteSubscription: (id) =>
-        setData((d) => ({
-          ...d,
-          subscriptions: d.subscriptions.filter((s) => s.id !== id),
-        })),
-
-      // --- Documents ---
       documents: data.documents,
-      createDocument: (input) => {
-        const id = newId();
-        const doc: BusinessDocument = {
-          ...input,
-          id,
-          created_at: now(),
-        };
-        setData((d) => ({ ...d, documents: [doc, ...d.documents] }));
-        return id;
-      },
-      updateDocument: (id, patch) =>
-        setData((d) => ({
-          ...d,
-          documents: d.documents.map((doc) =>
-            doc.id === id ? { ...doc, ...patch, id: doc.id } : doc,
-          ),
-        })),
-      deleteDocument: (id) =>
-        setData((d) => ({
-          ...d,
-          documents: d.documents.filter((doc) => doc.id !== id),
-        })),
-
-      // --- SOPs ---
       sops: data.sops,
+      getVendor: (id) => data.vendors.find((v) => v.id === id),
+      createVendor,
+      updateVendor,
+      deleteVendor,
+      createSubscription,
+      updateSubscription,
+      deleteSubscription,
+      createDocument,
+      updateDocument,
+      deleteDocument,
       getSop: (id) => data.sops.find((s) => s.id === id),
-      createSop: (input) => {
-        const id = newId();
-        const sop: Sop = {
-          status: "active",
-          version: 1,
-          ...input,
-          id,
-          updated_at: now(),
-        };
-        setData((d) => ({ ...d, sops: [sop, ...d.sops] }));
-        return id;
+      createSop,
+      updateSop,
+      deleteSop,
+      resetToSeed: () => {
+        if (DEMO_MODE) setData(seedData());
+        else void reload();
       },
-      updateSop: (id, patch) =>
-        setData((d) => ({
-          ...d,
-          sops: d.sops.map((s) =>
-            s.id === id
-              ? { ...s, ...patch, id: s.id, updated_at: now() }
-              : s,
-          ),
-        })),
-      deleteSop: (id) =>
-        setData((d) => ({
-          ...d,
-          sops: d.sops.filter((s) => s.id !== id),
-        })),
-
-      resetToSeed: () => setData(seedData()),
     };
-  }, [data, ready]);
+  }, [data, ready, supabase, reload]);
 
   return (
     <OperationsContext.Provider value={api}>
