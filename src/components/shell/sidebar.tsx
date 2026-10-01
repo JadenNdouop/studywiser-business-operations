@@ -9,15 +9,34 @@ import { Brand } from "@/components/brand";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
+  allNavItems,
   dashboardItem,
   navGroups,
   type NavGroup,
   type NavItem,
 } from "./nav-config";
 
-function isActive(pathname: string, href: string) {
+function matchesPath(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * The single active route for the current path: the LONGEST matching href.
+ * A section-index route like /finance is a prefix of its children, so without
+ * this the parent ("Overview") would light up on every child page.
+ */
+function resolveActiveHref(pathname: string): string | null {
+  let best: string | null = null;
+  for (const item of allNavItems) {
+    if (
+      matchesPath(pathname, item.href) &&
+      (best === null || item.href.length > best.length)
+    ) {
+      best = item.href;
+    }
+  }
+  return best;
 }
 
 interface Accent {
@@ -103,7 +122,7 @@ function NavLink({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const active = isActive(pathname, item.href);
+  const active = item.href === resolveActiveHref(pathname);
   const Icon = item.icon;
 
   return (
@@ -137,7 +156,8 @@ function NavGroupSection({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const groupActive = group.items.some((i) => isActive(pathname, i.href));
+  const activeHref = resolveActiveHref(pathname);
+  const groupActive = group.items.some((i) => i.href === activeHref);
   const [open, setOpen] = React.useState(true);
   const GroupIcon = group.icon;
   const accent = accentFor(group.accent);
