@@ -20,11 +20,86 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+interface Accent {
+  /** Section header icon color. */
+  icon: string;
+  /** Left rail color under the section. */
+  rail: string;
+  /** Active item background + text. */
+  activeBg: string;
+  activeText: string;
+  /** Collapsed-section "active" dot. */
+  dot: string;
+}
+
+/**
+ * Per-section accent colors. Keys match NavGroup.accent in nav-config. Full
+ * class strings (not built dynamically) so Tailwind keeps them in the build.
+ */
+const ACCENTS: Record<string, Accent> = {
+  emerald: {
+    icon: "text-emerald-600 dark:text-emerald-400",
+    rail: "border-emerald-500/30",
+    activeBg: "bg-emerald-500/10",
+    activeText: "text-emerald-700 dark:text-emerald-300",
+    dot: "bg-emerald-500",
+  },
+  sky: {
+    icon: "text-sky-600 dark:text-sky-400",
+    rail: "border-sky-500/30",
+    activeBg: "bg-sky-500/10",
+    activeText: "text-sky-700 dark:text-sky-300",
+    dot: "bg-sky-500",
+  },
+  violet: {
+    icon: "text-violet-600 dark:text-violet-400",
+    rail: "border-violet-500/30",
+    activeBg: "bg-violet-500/10",
+    activeText: "text-violet-700 dark:text-violet-300",
+    dot: "bg-violet-500",
+  },
+  amber: {
+    icon: "text-amber-600 dark:text-amber-400",
+    rail: "border-amber-500/30",
+    activeBg: "bg-amber-500/10",
+    activeText: "text-amber-700 dark:text-amber-300",
+    dot: "bg-amber-500",
+  },
+  fuchsia: {
+    icon: "text-fuchsia-600 dark:text-fuchsia-400",
+    rail: "border-fuchsia-500/30",
+    activeBg: "bg-fuchsia-500/10",
+    activeText: "text-fuchsia-700 dark:text-fuchsia-300",
+    dot: "bg-fuchsia-500",
+  },
+  rose: {
+    icon: "text-rose-600 dark:text-rose-400",
+    rail: "border-rose-500/30",
+    activeBg: "bg-rose-500/10",
+    activeText: "text-rose-700 dark:text-rose-300",
+    dot: "bg-rose-500",
+  },
+};
+
+const DEFAULT_ACCENT: Accent = {
+  icon: "text-muted-foreground",
+  rail: "border-sidebar-border",
+  activeBg: "bg-sidebar-accent",
+  activeText: "text-sidebar-accent-foreground",
+  dot: "bg-primary",
+};
+
+function accentFor(key?: string): Accent {
+  return (key && ACCENTS[key]) || DEFAULT_ACCENT;
+}
+
 function NavLink({
   item,
+  accent = DEFAULT_ACCENT,
   onNavigate,
 }: {
   item: NavItem;
+  accent?: Accent;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -39,7 +114,7 @@ function NavLink({
       className={cn(
         "group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
         active
-          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+          ? cn("font-medium", accent.activeBg, accent.activeText)
           : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
       )}
     >
@@ -65,15 +140,19 @@ function NavGroupSection({
   const groupActive = group.items.some((i) => isActive(pathname, i.href));
   const [open, setOpen] = React.useState(true);
   const GroupIcon = group.icon;
+  const accent = accentFor(group.accent);
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 border-t border-sidebar-border/70 pt-3">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-foreground"
+        className={cn(
+          "flex w-full items-center gap-2 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wider hover:text-foreground",
+          groupActive ? "text-foreground" : "text-muted-foreground/70",
+        )}
       >
-        <GroupIcon className="h-3.5 w-3.5" />
+        <GroupIcon className={cn("h-3.5 w-3.5", accent.icon)} />
         <span>{group.label}</span>
         <ChevronRight
           className={cn(
@@ -82,13 +161,23 @@ function NavGroupSection({
           )}
         />
         {!open && groupActive && (
-          <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+          <span className={cn("h-1.5 w-1.5 rounded-full", accent.dot)} />
         )}
       </button>
       {open && (
-        <div className="space-y-0.5 pl-1">
+        <div
+          className={cn(
+            "ml-[1.1rem] space-y-0.5 border-l pl-2.5",
+            accent.rail,
+          )}
+        >
           {group.items.map((item) => (
-            <NavLink key={item.href} item={item} onNavigate={onNavigate} />
+            <NavLink
+              key={item.href}
+              item={item}
+              accent={accent}
+              onNavigate={onNavigate}
+            />
           ))}
         </div>
       )}
@@ -106,8 +195,8 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </Link>
       </div>
       <ScrollArea className="flex-1">
-        <nav className="space-y-4 p-3">
-          <div className="space-y-0.5">
+        <nav className="space-y-3 p-3">
+          <div className="space-y-0.5 pb-1">
             <NavLink item={dashboardItem} onNavigate={onNavigate} />
           </div>
           {navGroups.map((group) => (

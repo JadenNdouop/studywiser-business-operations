@@ -37,6 +37,8 @@ export interface NavItem {
 export interface NavGroup {
   label: string;
   icon: LucideIcon;
+  /** Accent color key (see ACCENTS in sidebar.tsx) used to tint this section. */
+  accent: string;
   items: NavItem[];
 }
 
@@ -53,6 +55,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Finance",
     icon: Wallet,
+    accent: "emerald",
     items: [
       { title: "Overview", href: "/finance", icon: Gauge, phase: 3, ready: true },
       { title: "Revenue", href: "/finance/revenue", icon: TrendingUp, phase: 3, ready: true },
@@ -68,6 +71,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "CRM & Sales",
     icon: Contact,
+    accent: "sky",
     items: [
       { title: "Leads", href: "/crm/leads", icon: Target, phase: 2, ready: true },
       { title: "Pipeline", href: "/crm/pipeline", icon: FolderKanban, phase: 2, ready: true },
@@ -78,6 +82,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Workforce",
     icon: Briefcase,
+    accent: "violet",
     items: [
       { title: "Workers", href: "/workforce", icon: Users, phase: 4, ready: true },
       { title: "Compensation", href: "/workforce/compensation", icon: Wallet, phase: 4, ready: true },
@@ -88,6 +93,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Operations",
     icon: FolderKanban,
+    accent: "amber",
     items: [
       { title: "Projects", href: "/operations/projects", icon: FolderKanban, phase: 5, ready: true },
       { title: "Tasks", href: "/operations/tasks", icon: ListChecks, phase: 5, ready: true },
@@ -101,6 +107,7 @@ export const navGroups: NavGroup[] = [
   {
     label: "Business Intelligence",
     icon: BarChart3,
+    accent: "fuchsia",
     items: [
       { title: "Analytics", href: "/analytics", icon: BarChart3, phase: 6, ready: true },
     ],
@@ -108,11 +115,12 @@ export const navGroups: NavGroup[] = [
   {
     label: "Admin",
     icon: ShieldCheck,
+    accent: "rose",
     items: [
-      { title: "Users", href: "/admin/users", icon: UserCog, phase: 1, ready: false },
-      { title: "Roles", href: "/admin/roles", icon: ShieldCheck, phase: 1, ready: false },
-      { title: "Audit Log", href: "/admin/audit-log", icon: FileText, phase: 6 },
-      { title: "Settings", href: "/admin/settings", icon: Settings, phase: 1, ready: false },
+      { title: "Users", href: "/admin/users", icon: UserCog, phase: 1, ready: true },
+      { title: "Roles", href: "/admin/roles", icon: ShieldCheck, phase: 1, ready: true },
+      { title: "Audit Log", href: "/admin/audit-log", icon: FileText, phase: 6, ready: true },
+      { title: "Settings", href: "/admin/settings", icon: Settings, phase: 1, ready: true },
     ],
   },
 ];
