@@ -1,4 +1,4 @@
-import { GraduationCap } from "lucide-react";
+import Image from "next/image";
 
 import { cn } from "@/lib/utils";
 
@@ -12,9 +12,23 @@ export function Brand({
 }) {
   return (
     <div className={cn("flex items-center gap-2.5", className)}>
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-        <GraduationCap className="h-5 w-5" />
-      </span>
+      {/* Light mode: white background (blue "S"). Dark mode: blue background (white "S"). */}
+      <Image
+        src="/studywiser-badge-light.png"
+        alt="StudyWiser"
+        width={32}
+        height={32}
+        priority
+        className="h-8 w-8 shrink-0 rounded-lg dark:hidden"
+      />
+      <Image
+        src="/studywiser-badge.png"
+        alt="StudyWiser"
+        width={32}
+        height={32}
+        priority
+        className="hidden h-8 w-8 shrink-0 rounded-lg dark:block"
+      />
       {!iconOnly && (
         <span className="flex flex-col leading-none">
           <span className="text-sm font-semibold tracking-tight">
