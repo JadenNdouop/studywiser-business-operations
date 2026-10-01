@@ -1,13 +1,15 @@
 import { FlaskConical } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { DEMO_MODE } from "@/lib/demo-mode";
 
 /**
  * Banner marking a screen as running on local sample data rather than the real
- * database. The figures are computed live, but from sample data held in the
- * browser; it goes away once the domain data is served from Supabase.
+ * database. It only shows in demo mode; once the app runs against Supabase
+ * (DEMO_MODE=false) the data is real and the banner hides itself.
  */
 export function DemoBanner({ className }: { className?: string }) {
+  if (!DEMO_MODE) return null;
   return (
     <div
       className={cn(
