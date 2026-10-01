@@ -28,9 +28,9 @@ export function LoginForm({
   });
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-lg">
       <CardHeader>
-        <CardTitle className="text-xl">Sign in</CardTitle>
+        <CardTitle className="text-2xl">Sign in</CardTitle>
         <CardDescription>
           Welcome back. Enter your credentials to access the operations
           console.
